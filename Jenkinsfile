@@ -9,7 +9,6 @@ pipeline {
     stage('Checkout') {
       steps {
         git branch: 'main', url: 'https://github.com/nandinimandli/auto-deploy-ci-cd.git'
-
       }
     }
 
