@@ -1,0 +1,61 @@
+pipeline {
+  agent any
+
+  environment {
+    AWS_REGION = 'ap-south-1'
+    ECR_REPO = '102080400969.dkr.ecr.ap-south-1.amazonaws.com/expense-backend'
+    SONAR_HOST_URL = 'http://13.235.55.173:9000'
+  }
+
+  tools {
+    sonarQubeScanner 'sonar-scanner'  // Name must match configured tool
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git 'https://github.com/nandinimandli/auto-deploy-ci-cd.git'
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      environment {
+        SONAR_TOKEN = credentials('sonar-token')
+      }
+      steps {
+        withSonarQubeEnv('Sonar') {
+          sh '''
+          sonar-scanner \
+            -Dsonar.projectKey=myapp \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN
+          '''
+        }
+      }
+    }
+
+    stage('Docker Build & Push') {
+      environment {
+        AWS_ACCESS_KEY_ID = credentials('aws-creds')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-creds')
+      }
+      steps {
+        sh '''
+        docker build -t $ECR_REPO:latest .
+        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+        docker push $ECR_REPO:latest
+        '''
+      }
+    }
+
+    stage('Deploy to EKS') {
+      steps {
+        sh '''
+        aws eks update-kubeconfig --region $AWS_REGION --name auto-deploy-eks
+        kubectl apply -f k8s/
+        '''
+      }
+    }
+  }
+}
